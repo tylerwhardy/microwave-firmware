@@ -1,0 +1,312 @@
+---------------------------------------------
+PIC ASSEMBLER LISTING
+Line    Address Opcode  Instruction
+---------------------------------------------
+0001    000000          ;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0002    000000          ;This program implements a microwave oven controller.  A time is set using
+0003    000000          ;the matrix keypad.  Time is counted down and displayed on two seven-segment
+0004    000000          ;LEDs.  Other LEDs indicate cooking status. Template Provided by Dr.Ron Hayne.
+0005    000000          ;Edited by Tyler Hardy and Clifford McNeill
+0006    000000          ;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0007    000000          
+0008    000000          ;Line removed by MPASMWIN preprocessor:  	Title "Microwave"
+0009    000000          ;Line removed by MPASMWIN preprocessor:  	List p=18F452, f =inhx32
+0010    000000          ;Line removed by MPASMWIN preprocessor:  	#include <p18F452.inc>		;*Header file for PIC18F452
+0011    000000          
+0012    000000          ZERO		EQU	0x00		;*Zero register
+0013    000000          BCD0		EQU	0x01		;*Time low BCD Digit
+0014    000000          BCD1		EQU	0x02		;*Time high BCD Digit
+0015    000000          TEMP		EQU	0x10		;*Temporary register for GETCODE
+0016    000000          KYSOPEN		EQU	0x11		;*Code register for all keys open
+0017    000000          START		EQU	0x12		;*Code register for Start
+0018    000000          STOP		EQU	0x13		;*Code register for Stop
+0019    000000          DOOR		EQU	0x14		;*Code register for Door
+0020    000000          BUZZ		EQU	0x15		;*Code register for Buzzer
+0021    000000          MAG		EQU	0x16		;*Code register for Magnitron
+0022    000000          SCALE		EQU	0xC0		;*Scale for Timer0
+0023    000000          
+0024    000000          		ORG	00		;*Begin assembly
+0025    000000  EF10    		GOTO	MAIN		;*Program begins at 0020H
+0025    000002  F000
+0026    000004          
+0027    000004          		ORG	0x08
+0028    000008  EF64    		GOTO 	TMR0_ISR	;*Timer0 Interrupt Vector
+0028    00000A  F000
+0029    00000C          
+0030    00000C          		ORG	0x20
+0031    000020  0EE0    MAIN: 		MOVLW	B'11100000'	;*Init Timer0:interrupt enable
+0032    000022  6EF2    		MOVWF	INTCON
+0033    000024  0E44    		MOVLW	B'01000100'	;*Timer0:8-bit,internal clock,prescale-1:32
+0034    000026  6ED5    		MOVWF	T0CON
+0035    000028  0EC0    		MOVLW	SCALE		;*Low count
+0036    00002A  6ED6    		MOVWF	TMR0L		;*Load low count in Timer0
+0037    00002C  94F2    		BCF 	INTCON,TMR0IF	;*Clear TIMR0 overflow flag – Reset timer
+0038    00002E  0EF0    		MOVLW	0xF0		;*Enable RB7-RB4 as input and RB3-RB0 as output
+0039    000030  6E93    		MOVWF	TRISB
+0040    000032  6A00    		CLRF	ZERO		;*Code for zero
+0041    000034  0E0F    		MOVLW	0x0F		;*Code when all keys are open
+0042    000036  6E11    		MOVWF	KYSOPEN
+0043    000038  0E0F    		MOVLW	0x0F		;*Code for Start
+0044    00003A  6E12    		MOVWF	START
+0045    00003C  0E0A    		MOVLW	0x0A		;*Code for Stop
+0046    00003E  6E13    		MOVWF	STOP
+0047    000040  0E0B    		MOVLW	0x0B		;*Code for Door Open
+0048    000042  6E14    		MOVWF	DOOR
+0049    000044  0E02    		MOVLW	0x02		;*Code for Magnetron
+0050    000046  6E16    		MOVWF	MAG
+0051    000048  0E01    		MOVLW	0x01		;*Code for Buzzer
+0052    00004A  6E15    		MOVWF	BUZZ
+0053    00004C  6A92    		CLRF	TRISA	  	;*Init PORT A,C, and D as output ports
+0054    00004E  6A94    		CLRF	TRISC
+0055    000050  6A95     		CLRF	TRISD
+0056    000052  6A80    		CLRF	PORTA		;*Init LEDs OFF
+0057    000054  6882    		SETF	PORTC		;*Init 7-Seg LEDs OFF
+0058    000056  6883    		SETF	PORTD
+0059    000058  6A01    		CLRF	BCD0		;*Init Time=0
+0060    00005A  6A02    		CLRF	BCD1
+0061    00005C  EC46    I_LOOP:		CALL	INPUT		;*Call Input to get Time
+0061    00005E  F000
+0062    000060  EC71    		CALL	KEYCHK		;*Check for Start
+0062    000062  F000
+0063    000064  6212    		CPFSEQ	START
+0064    000066  D7FA    		BRA	I_LOOP
+0065    000068  8ED5    C_START:	BSF	T0CON,TMR0ON	;*Enable Timer0
+0066    00006A  EC4E    C_LOOP:		CALL	COOK		;*Cooking
+0066    00006C  F000
+0067    00006E  5002    		MOVF	BCD1,W		;*Check if BCD1 is zero
+0068    000070  E001    		BZ	C_DONE		;*If zero, branch to C_DONE
+0069    000072  D7FB    		BRA	C_LOOP		;*If not zero, continue c_loop
+0070    000074          
+0071    000074  5001    C_DONE:		MOVF	BCD0,W		;*Check if BCD0 is zero
+0072    000076  6200    		CPFSEQ	ZERO
+0073    000078  D7F8    		BRA	C_LOOP		;*If not zero, continue c_loop
+0074    00007A  9ED5    		BCF	T0CON,TMR0ON	;*If zero, turn off timer
+0075    00007C  9280    		BCF	PORTA,1		;*Turn on buzzer
+0076    00007E  8080    		BSF	PORTA,0		;*Turn off magnetron
+0077    000080  EC71    DONE_DOOR:	CALL	KEYCHK		;*Check for door open when done
+0077    000082  F000
+0078    000084  6214    		CPFSEQ	DOOR
+0079    000086  D7FC    		BRA	DONE_DOOR	;*Keep checking until door opens
+0080    000088  9080    		BCF	PORTA,0		;*Turn off buzzer
+0081    00008A  D7E8    		BRA	I_LOOP		;*Return to input loop
+0082    00008C          
+0083    00008C          
+0084    00008C          INPUT:		;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0085    00008C          		;Function:	INPUT gets User Input for Time.
+0086    00008C          		;		Calls KEYCHK and OUTLED.
+0087    00008C          		;Output:	Time in BCD1
+0088    00008C          		;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0089    00008C          
+0090    00008C  EC71    		CALL 	KEYCHK		;*Check for key press
+0090    00008E  F000
+0091    000090  6413    		CPFSGT	STOP		;*Pass to OUTLED only if a number
+0092    000092  0012    		RETURN
+0093    000094  6E02    		MOVWF 	BCD1		;*Move input to BCD1
+0094    000096  ECC4    		CALL 	OUTLED		;*Display input
+0094    000098  F000
+0095    00009A          
+0096    00009A  0012    		RETURN
+0097    00009C          
+0098    00009C          COOK:		;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0099    00009C          		;Function:	COOK checks for Stop and Door and Lights Magnetron
+0100    00009C          		;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0101    00009C          
+0102    00009C  C016    		MOVFF 	MAG,PORTA	;*Turn on Magnetron
+0102    00009E  FF80
+0103    0000A0  EC71    DOOR_CHK:	CALL 	KEYCHK		;*Check Keys
+0103    0000A2  F000
+0104    0000A4  6214    		CPFSEQ	DOOR
+0105    0000A6  D004    		BRA	STOP_CHK	;*Door is shut, check stop key
+0106    0000A8  9ED5    		BCF	T0CON,TMR0ON	;*Pause timer
+0107    0000AA  9280    		BCF	PORTA,1		;*Turn off Magnetron
+0108    0000AC  9080    		BCF	PORTA,0		;*Turn off Buzzer
+0109    0000AE  D7F8    		BRA	DOOR_CHK	;*Stay paused until door shuts
+0110    0000B0          
+0111    0000B0          
+0112    0000B0          
+0113    0000B0          
+0114    0000B0  AED5    STOP_CHK:	BTFSS	T0CON,TMR0ON	;*If timer is on, skip
+0115    0000B2  8ED5    		BSF	T0CON,TMR0ON	;*Start timer
+0116    0000B4  6213    		CPFSEQ	STOP		;*If stop is pressed, clear timer
+0117    0000B6  D007    		BRA	COOK_RTN
+0118    0000B8          
+0119    0000B8  C000    		MOVFF	ZERO,BCD1	;*Clear 7-Seg
+0119    0000BA  F002
+0120    0000BC  C000    		MOVFF	ZERO,BCD0
+0120    0000BE  F001
+0121    0000C0  ECC4    		CALL	OUTLED
+0121    0000C2  F000
+0122    0000C4  0012    		RETURN
+0123    0000C6          
+0124    0000C6          
+0125    0000C6  0012    COOK_RTN:	RETURN			;*Return
+0126    0000C8          
+0127    0000C8          TMR0_ISR:	;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0128    0000C8          		;Timer0 Interrupt Service Routine:  Resets Timer0.
+0129    0000C8          		;Decrements Time and calls OUTLED.
+0130    0000C8          		;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0131    0000C8          
+0132    0000C8  0EC0    		MOVLW	SCALE		;*Low count
+0133    0000CA  6ED6    		MOVWF	TMR0L		;*Load low count in Timer0
+0134    0000CC  94F2    		BCF 	INTCON,TMR0IF	;*Clear TIMR0 overflow flag – Reset timer
+0135    0000CE  5001    		MOVF	BCD0,W		;*Move BCD0 to check for zero
+0136    0000D0  E002    		BZ	ZERO_0		;*If zero go to ZERO_0
+0137    0000D2  0601    		DECF	BCD0,F		;*If not zero, decrement BCD0
+0138    0000D4  D003    		BRA	TMR0_RTN	;*Display and return
+0139    0000D6  0E09    ZERO_0:		MOVLW	0x09		;*Change BCD0 to nine
+0140    0000D8  6E01    		MOVWF	BCD0
+0141    0000DA  0602    		DECF	BCD1,F		;*Decrement BCD1
+0142    0000DC          
+0143    0000DC          
+0144    0000DC  ECC4    TMR0_RTN:	CALL	OUTLED
+0144    0000DE  F000
+0145    0000E0  0011    		RETFIE	FAST		;*Return
+0146    0000E2          
+0147    0000E2          KEYCHK:        	;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0148    0000E2                	      	;Function:	KEYCHK checks first that all keys are open, then
+0149    0000E2          	    	;		checks a key closure using KEYCODE
+0150    0000E2          		;Output: 	Sets Bit7 if all keys are open
+0151    0000E2          		;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0152    0000E2          
+0153    0000E2  0E0F    		MOVLW	0x0F		;*Set RB0-RB3 Hi
+0154    0000E4  6E81    		MOVWF	PORTB
+0155    0000E6  5081    		MOVF	PORTB,W		;*Read PORTB
+0156    0000E8  6211    		CPFSEQ 	KYSOPEN		;*Are all keys open?
+0157    0000EA  D002    		BRA	KEYCODE
+0158    0000EC  0E80    		MOVLW	B'10000000'	;*Return a 1 in Bit7 if all open
+0159    0000EE  0012    		RETURN
+0160    0000F0          
+0161    0000F0          KEYCODE:	;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0162    0000F0          		;Function: 	KEYCODE encodes the key and identify the key position
+0163    0000F0          		;Output: 	Encoded key position in W register
+0164    0000F0          		;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0165    0000F0          
+0166    0000F0  0E00    COLRB0:		MOVLW	0x00		;*Get ready to scan Column RB0
+0167    0000F2  1681    		ANDWF	PORTB, F	;*All other keys should be 0s
+0168    0000F4  8081    SETRB0:		BSF	PORTB, 0	;*Set Column - RB0
+0169    0000F6  A881    KEYB04:		BTFSS 	PORTB, 4	;*Check RB4, if = 1, find code
+0170    0000F8  D002    		BRA	KEYB05 		;*If RB4 = 0, check next key
+0171    0000FA  0E01    		MOVLW	0x01		;*Code for Key '1'
+0172    0000FC  0012    		RETURN
+0173    0000FE  AA81    KEYB05:		BTFSS	PORTB, 5 	;Check RB5, if = 1, find code
+0174    000100  D002    		BRA	KEYB06		;If RB5 = 0, check next key
+0175    000102  0E04    		MOVLW	0x04		;Code for key '4'
+0176    000104  0012    		RETURN
+0177    000106  AC81    KEYB06:		BTFSS	PORTB, 6 	;*Check RB6, if = 1, find code
+0178    000108  D002    		BRA	KEYB07		;*If RB6 = 0, check next key
+0179    00010A  0E07    		MOVLW	0x07		;*Code for key '7'
+0180    00010C  0012    		RETURN
+0181    00010E  AE81    KEYB07:		BTFSS	PORTB, 7 	;*Check RB7, if = 1, find code
+0182    000110  D002    		BRA	COLRB1		;*If RB7 = 0, go to next column
+0183    000112  0E0A    		MOVLW	0x0A		;*Code for key 'A'
+0184    000114  0012    		RETURN
+0185    000116  0E00    COLRB1:		MOVLW	0x00		;*Get ready to scan Column RB1
+0186    000118  1681    		ANDWF	PORTB, F	;*All other keys should be 0s
+0187    00011A  8281    SETRB1:		BSF	PORTB, 1	;*Set Column - RB1
+0188    00011C  A881    KEYB14:		BTFSS 	PORTB, 4	;*Check RB4, if = 1, find code
+0189    00011E  D002    		BRA	KEYB15 		;*If RB4 = 0, check next key
+0190    000120  0E02    		MOVLW	0x02		;*Code for Key '2'
+0191    000122  0012    		RETURN
+0192    000124  AA81    KEYB15:		BTFSS	PORTB, 5 	;*Check RB5, if = 1, find code
+0193    000126  D002    		BRA	KEYB16		;*If RB5 = 0, check next key
+0194    000128  0E05    		MOVLW	0x05		;*Code for key '5'
+0195    00012A  0012    		RETURN
+0196    00012C  AC81    KEYB16:		BTFSS	PORTB, 6 	;*Check RB6, if = 1, find code
+0197    00012E  D002    		BRA	KEYB17		;*If RB6 = 0, check next key
+0198    000130  0E08    		MOVLW	0x08		;*Code for key '8'
+0199    000132  0012    		RETURN
+0200    000134  AE81    KEYB17:		BTFSS	PORTB, 7 	;*Check RB7, if = 1, find code
+0201    000136  D002    		BRA	COLRB2		;*If RB7 = 0, go to next column
+0202    000138  0E00    		MOVLW	0x00		;Code for key '0'
+0203    00013A  0012    		RETURN
+0204    00013C  0E00    COLRB2:		MOVLW	0x00		;*Get ready to scan Column RB2
+0205    00013E  1681    		ANDWF	PORTB, F	;*All other keys should be 0s
+0206    000140  8481    SETRB2:		BSF	PORTB, 2	;*Set Column - RB2
+0207    000142  A881    KEYB24:		BTFSS 	PORTB, 4	;*Check RB4, if = 1, find code
+0208    000144  D002    		BRA	KEYB25 		;*If RB4 = 0, check next key
+0209    000146  0E03    		MOVLW	0x03		;*Code for Key '3'
+0210    000148  0012    		RETURN
+0211    00014A  AA81    KEYB25:		BTFSS	PORTB, 5 	;*Check RB5, if = 1, find code
+0212    00014C  D002    		BRA	KEYB26		;*If RB1 = 5, check next key
+0213    00014E  0E06    		MOVLW	0x06		;*Code for key '6'
+0214    000150  0012    		RETURN
+0215    000152  AC81    KEYB26:		BTFSS	PORTB, 6 	;*Check RB6, if = 1, find code
+0216    000154  D002    		BRA	KEYB27		;*If RB6 = 0, check next key
+0217    000156  0E09    		MOVLW	0x09		;*Code for key '9'
+0218    000158  0012    		RETURN
+0219    00015A  AE81    KEYB27:		BTFSS	PORTB, 7 	;*Check RB7, if = 1, find code
+0220    00015C  D002    		BRA	COLRB3		;*If RB7 = 0, go to next column
+0221    00015E  0E0B    		MOVLW	0x0B		;*Code for key 'B'
+0222    000160  0012    		RETURN
+0223    000162  0E00    COLRB3:		MOVLW	0x00		;*Get ready to scan Column RB3
+0224    000164  1681    		ANDWF	PORTB, F	;*All other keys should be 0s
+0225    000166  8681    SETRB3:		BSF	PORTB, 3	;*Set Column - RB3
+0226    000168  A881    KEYB34:		BTFSS 	PORTB, 4	;*Check RB4, if = 1, find code
+0227    00016A  D002    		BRA	KEYB35 		;*If RB4 = 0, check next key
+0228    00016C  0E0C    		MOVLW	0x0C		;*Code for Key 'C'
+0229    00016E  0012    		RETURN
+0230    000170  AA81    KEYB35:		BTFSS	PORTB, 5 	;*Check RB5, if = 1, find code
+0231    000172  D002    		BRA	KEYB36		;*If RB5 = 0, check next key
+0232    000174  0E0D    		MOVLW	0x0D		;*Code for key 'D'
+0233    000176  0012    		RETURN
+0234    000178  AC81    KEYB36:		BTFSS	PORTB, 6 	;*Check RB6, if = 1, find code
+0235    00017A  D002    		BRA	KEYB37		;*If RB6 = 0, check next key
+0236    00017C  0E0E    		MOVLW	0x0E		;*Code for key 'E'
+0237    00017E  0012    		RETURN
+0238    000180  AE81    KEYB37:		BTFSS	PORTB, 7 	;*Check RB7, if = 1, find code
+0239    000182  D001    		BRA	RTN		;*If RB7 = 0, go to next column
+0240    000184  0E0F    		MOVLW	0x0F		;*Code for key 'F'
+0241    000186  0012    RTN:		RETURN
+0242    000188          
+0243    000188          
+0244    000188          OUTLED: 	;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0245    000188           		;Function:	OUTLED gets the unpacked BCD digits from BCD1 and
+0246    000188          		;		BCD0, gets seven-segment code by calling another
+0247    000188          		;		subroutine GETCODE and displays BCD digits at
+0248    000188          		;		PORTD and PORTC
+0249    000188           		;Input: 	Unpacked BCD number in BCD1 and BCD0
+0250    000188           		;Output:	Calls another subroutine GETCODE
+0251    000188                 		;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0252    000188          
+0253    000188  5001     		MOVF	BCD0,W		;*Get low-order BCD digit in W
+0254    00018A  ECCF     		CALL	GETCODE		;*Find its seven-segment code
+0254    00018C  F000
+0255    00018E  CFF5     		MOVFF 	TABLAT,PORTC 	;*Display it at PORTC
+0255    000190  FF82
+0256    000192  5002     		MOVF	BCD1,W		;*Get high-order BCD
+0257    000194  ECCF     		CALL	GETCODE		;*Get its code
+0257    000196  F000
+0258    000198  CFF5     		MOVFF	TABLAT,PORTD	;*Display at PORTD
+0258    00019A  FF83
+0259    00019C  0012     		RETURN
+0260    00019E          
+0261    00019E          GETCODE:	;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0262    00019E          		;Function:	This subroutine gets an unpacked digit from WREG
+0263    00019E          		;		and looks up its seven-segment code and stores it
+0264    00019E          		;		in TABLAT
+0265    00019E           		;Input: 	Unpacked digit in W
+0266    00019E           		;Output: 	Seven-segment LED code in TABLAT
+0267    00019E                 		;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+0268    00019E          
+0269    00019E  6E10     		MOVWF	TEMP
+0270    0001A0  0E00     		MOVLW	UPPER LEDCODE	;*Copy upper 5 bits in Table Pointer of
+0271    0001A2  6EF8     		MOVWF	TBLPTRU		;*21_bit address of LEDCODE
+0272    0001A4  0E01     		MOVLW	HIGH LEDCODE	;*Copy high 8 bit in Table Pointer
+0273    0001A6  6EF7     		MOVWF	TBLPTRH
+0274    0001A8  0EB4     		MOVLW	LOW LEDCODE	;*Copy low 8 bits in Table Pointer
+0275    0001AA  6EF6     		MOVWF	TBLPTRL
+0276    0001AC  5010     		MOVF	TEMP,W		;*Get BCD number to be displayed
+0277    0001AE  26F6     		ADDWF	TBLPTRL,F 	;*Add BCD number to Table Pointer
+0278    0001B0  0008     		TBLRD*			;*Read LED code from memory
+0279    0001B2  0012     		RETURN
+0280    0001B4          
+0281    0001B4  F9C0    LEDCODE:	DB	0xC0, 0xF9, 0xA4, 0xB0, 0x99 ;*Code for digits 0 to 4
+0281    0001B6  B0A4
+0281    0001B8  0099
+0282    0001B9  8292     		DB	0x92, 0x82, 0xF8, 0x80, 0x90 ;*Code for digits 5 to 9
+0282    0001BB  80F8
+0282    0001BD  0090
+0283    0001BE          
+0284    0001BE           		END
+0285    0001BE          
+0286    0001BE          
